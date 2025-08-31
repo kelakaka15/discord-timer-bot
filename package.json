@@ -1,7 +1,6 @@
 {
   "name": "discord-timer-bot",
   "version": "1.0.0",
-  "description": "Discord bot hẹn giờ phát âm thanh",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
@@ -9,6 +8,7 @@
   "dependencies": {
     "discord.js": "^14.13.0",
     "@discordjs/voice": "^0.16.0",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2" // chỉ cần nếu dùng Option B
   }
 }
