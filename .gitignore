@@ -1,0 +1,13 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Env & hệ thống
+.env
+.env.*
+.DS_Store
+
+# Khác (nếu dùng editor)
+.vscode/
+.idea/
