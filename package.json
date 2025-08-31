@@ -1,17 +1,18 @@
 {
   "name": "discord-timer-bot",
   "version": "1.0.0",
-  "description": "Discord timer bot (Express keep-alive, SFX synth, queue, role mention)",
+  "description": "Discord timer bot (Soundboard-only, Express keep-alive, queue, role mention)",
   "main": "bot.js",
-  "scripts": { "start": "node bot.js" },
+  "scripts": {
+    "start": "node bot.js"
+  },
   "dependencies": {
     "@discordjs/voice": "^0.16.0",
-    "@discordjs/opus": "^0.9.0",
-    "opusscript": "^0.0.8",
     "discord.js": "^14.13.0",
     "dotenv": "^16.3.1",
-    "express": "^4.18.2",
-    "prism-media": "^1.3.5"
+    "express": "^4.18.2"
   },
-  "engines": { "node": "20.x" }
+  "engines": {
+    "node": "20.x"
+  }
 }
