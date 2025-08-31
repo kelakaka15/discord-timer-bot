@@ -1,7 +1,10 @@
+// bot.js
 require("dotenv").config();
 
 const express = require("express");
+const fs = require("fs");
 const path = require("path");
+
 const {
   Client,
   GatewayIntentBits,
@@ -9,24 +12,24 @@ const {
   REST,
   Routes
 } = require("discord.js");
+
 const {
   joinVoiceChannel,
   createAudioPlayer,
   createAudioResource,
   AudioPlayerStatus,
   entersState,
-  VoiceConnectionStatus
+  VoiceConnectionStatus,
+  demuxProbe
 } = require("@discordjs/voice");
 
-// --- Express keep-alive cho Render Web Service ---
+/* -------------------- Express keep-alive (Render Web Service) -------------------- */
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.get("/", (_, res) => res.send("OK - Discord Timer Bot"));
-app.listen(PORT, () => {
-  console.log(`Express server listening on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Express server listening on port ${PORT}`));
 
-// --- Discord client ---
+/* --------------------------------- Discord bot ---------------------------------- */
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates]
 });
@@ -40,7 +43,7 @@ if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
   process.exit(1);
 }
 
-// --- Slash commands: /timer minutes(1-150) role(optional) ---
+/* --------------------------- Slash command: /timer ------------------------------- */
 const commands = [
   new SlashCommandBuilder()
     .setName("timer")
@@ -61,7 +64,6 @@ const commands = [
     )
 ].map(c => c.toJSON());
 
-// --- Đăng ký lệnh (guild-scoped cho nhanh) ---
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 (async () => {
   try {
@@ -75,7 +77,7 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
   }
 })();
 
-// --- Hàng đợi theo guild để chống va chạm khi nhiều timer nổ cùng lúc ---
+/* -------------------------- Per-guild playback queue ----------------------------- */
 const guildQueues = new Map(); // guildId -> array<() => Promise<void>>
 
 function addToQueue(guildId, job) {
@@ -96,6 +98,7 @@ async function runNext(guildId) {
   }
 }
 
+/* --------------------------------- Handlers ------------------------------------- */
 client.once("ready", () => {
   console.log(`✅ Bot online: ${client.user.tag}`);
 });
@@ -105,7 +108,7 @@ client.on("interactionCreate", async interaction => {
   if (interaction.commandName !== "timer") return;
 
   const minutes = interaction.options.getInteger("minutes");
-  const pickedRole = interaction.options.getRole("role"); // optional
+  const pickedRole = interaction.options.getRole("role");
   const voiceChannel = interaction.member?.voice?.channel;
 
   if (!voiceChannel) {
@@ -123,7 +126,7 @@ client.on("interactionCreate", async interaction => {
 
   setTimeout(() => {
     const job = async () => {
-      // Tại thời điểm nổ timer, người gọi có thể đã rời kênh
+      // Có thể kênh đã đổi / bị xoá
       const channelNow = interaction.guild.channels.cache.get(voiceChannel.id);
       if (!channelNow) {
         await interaction.followUp("⚠️ Voice channel không còn tồn tại.");
@@ -137,17 +140,20 @@ client.on("interactionCreate", async interaction => {
       });
 
       try {
-        // Chờ sẵn sàng
         await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
 
         const player = createAudioPlayer();
         const filePath = path.join(__dirname, "sound.mp3");
-        const resource = createAudioResource(filePath);
+
+        // demuxProbe: ổn định hơn khi phát MP3/WAV
+        const fileStream = fs.createReadStream(filePath);
+        const { stream: probedStream, type } = await demuxProbe(fileStream);
+        const resource = createAudioResource(probedStream, { inputType: type });
 
         connection.subscribe(player);
         player.play(resource);
 
-        // Gửi ping khi hết giờ (ngay khi bắt đầu phát)
+        // Ping ngay khi đến giờ (và đã bắt đầu phát)
         if (pickedRole) {
           await interaction.followUp({
             content: `⏰ Hết giờ! Ping <@&${pickedRole.id}>`,
@@ -157,39 +163,31 @@ client.on("interactionCreate", async interaction => {
           await interaction.followUp("⏰ Hết giờ!");
         }
 
-        // Tự out tối đa sau 30s kể từ bắt đầu phát
+        // Tự out tối đa sau 30s kể từ lúc bắt đầu phát
         const forceLeave = setTimeout(() => {
-          try {
-            connection.destroy();
-          } catch {}
+          try { connection.destroy(); } catch {}
         }, 30_000);
 
         player.on(AudioPlayerStatus.Playing, () => {
-          console.log("🎵 Đang phát:", filePath);
+          console.log("🎵 PLAYING:", filePath, "inputType:", type);
         });
 
         await new Promise(resolve => {
           player.on(AudioPlayerStatus.Idle, () => {
             clearTimeout(forceLeave);
-            try {
-              connection.destroy();
-            } catch {}
+            try { connection.destroy(); } catch {}
             resolve();
           });
           player.on("error", err => {
             console.error("❌ Audio player error:", err);
             clearTimeout(forceLeave);
-            try {
-              connection.destroy();
-            } catch {}
+            try { connection.destroy(); } catch {}
             resolve();
           });
         });
       } catch (err) {
         console.error("❌ Join/Ready/Play error:", err);
-        try {
-          connection.destroy();
-        } catch {}
+        try { connection.destroy(); } catch {}
         await interaction.followUp("⚠️ Có lỗi khi vào voice hoặc phát âm thanh.");
       }
     };
